@@ -1,5 +1,7 @@
 # 🔊 Audio del iMac 2017 en Linux — Cirrus Logic CS8409
 
+**Versión actual: 1.1.0** · [Novedades](CHANGELOG.md)
+
 **Solución completa para que funcionen los altavoces internos, los auriculares y el HDMI de los Apple iMac de 2017 (iMac18,1 · iMac18,2 · iMac18,3) en Linux.**
 
 Incluye un driver parcheado basado en [davidjo/snd_hda_macbookpro](https://github.com/davidjo/snd_hda_macbookpro), un **instalador universal con menú** (Fedora, Ubuntu/Debian, Arch, openSUSE y NixOS), compilación automática con **DKMS** para que sobreviva a las actualizaciones del kernel, un **selector de modo altavoces / auriculares** y la configuración de **PipeWire / WirePlumber** para usar los altavoces y el HDMI a la vez.
@@ -189,39 +191,46 @@ Crea en el menú de aplicaciones (y en el Escritorio) dos accesos que apuntan a 
 
 ```
 =============================================================================
-      INSTALADOR UNIVERSAL DE AUDIO APPLE (CIRRUS CS8409 / TAS57642)
+      INSTALADOR UNIVERSAL DE AUDIO APPLE (CIRRUS CS8409 / TAS57642)  v1.1.0
            Soporte probado para iMac18,1, iMac18,2, iMac18,3 y MBP
 =============================================================================
  Kernel activo : 6.x.y
  Sistema       : Fedora Linux 4x (Workstation Edition)
+ Usuario       : tu_usuario
 -----------------------------------------------------------------------------
    1) Autodetectar e instalar automáticamente (Recomendado)
    2) Instalar en sistemas basados en RPM (Fedora, RHEL, CentOS, openSUSE)
    3) Instalar en sistemas basados en DEB (Ubuntu, Debian, Linux Mint, Pop!_OS)
    4) Instalar en sistemas basados en Arch (Arch Linux, Manjaro, EndeavourOS)
-   5) Instalar / Generar módulo para Nix / NixOS
+   5) Generar módulo para Nix / NixOS (experimental)
    6) Configurar conmutación independiente HDMI / Altavoces (WirePlumber)
    7) Diagnóstico de audio y prueba de altavoces
-   8) Salir
+   8) Desinstalar el controlador
+   9) Salir
 ```
+
+Después de cada opción el instalador vuelve al menú.
 
 | Opción | Función interna | Qué hace |
 |---|---|---|
-| **1** | `autodetectar_e_instalar` | Lee `/etc/os-release` (`ID` e `ID_LIKE`) y lanza el flujo RPM, DEB, Arch o Nix que corresponda. |
+| **1** | `autodetectar_e_instalar` | Lee `/etc/os-release` (`ID` e `ID_LIKE`) y lanza el flujo RPM, DEB, Arch o Nix que corresponda. Si detecta un sistema inmutable (rpm-ostree), se detiene y avisa. |
 | **2** | `instalar_rpm` | Dependencias con `dnf` (o `zypper`), compilación DKMS, configuración e initramfs con `dracut`. |
 | **3** | `instalar_deb` | Dependencias con `apt-get`, compilación DKMS, configuración e initramfs con `update-initramfs`. |
 | **4** | `instalar_arch` | Dependencias con `pacman` (elige `linux-headers`, `-lts`, `-zen` o `-hardened` según tu kernel) e initramfs con `mkinitcpio -P`. |
-| **5** | `instalar_nix` | Genera `/etc/nixos/cs8409-audio.nix` (ver [sección 12](#12-nixos)). |
+| **5** | `instalar_nix` | Genera `/etc/nixos/cs8409-audio.nix` (experimental, ver [sección 12](#12-nixos)). |
 | **6** | `configurar_dual_audio_hdmi_altavoces` | Solo la parte de PipeWire/WirePlumber y reinicia el audio del usuario. |
-| **7** | `diagnostico_audio` | Muestra módulos cargados, parámetros, estado del jack y salidas de PipeWire, y reproduce un sonido de prueba. |
-| **8** | — | Sale. |
+| **7** | `diagnostico_audio` | Muestra el módulo cargado y su archivo, si tiene el parche del iMac, parámetros, DKMS, el servicio guardián, el estado del jack y las salidas de PipeWire. Reproduce un sonido de prueba si lo pides. |
+| **8** | `desinstalar` | Quita el módulo DKMS, el servicio guardián y toda la configuración, y regenera el initramfs (ver [sección 15](#15-desinstalar)). |
+| **9** | — | Sale. |
 
 ## 8. Qué hace la instalación, paso a paso
 
 Los flujos RPM, DEB y Arch siguen la misma secuencia:
 
 ### Paso 0: elevación a root
-Si no se ejecuta como root, el script se relanza con `exec sudo bash "$0"`. También detecta el **usuario real** (`$SUDO_USER`) para configurar su PipeWire y su carpeta personal.
+Si no se ejecuta como root, el script se relanza con `exec sudo bash "$0"`. También detecta el **usuario real** (`$SUDO_USER`) para configurar su PipeWire y su carpeta personal. Las órdenes de audio del usuario (`systemctl --user`, `pactl`, `pw-play`) se ejecutan dentro de su sesión con `runuser`.
+
+Cada paso importante se comprueba. Si algo falla (dependencias, descarga, compilación), el instalador **lo dice claramente, no toca los módulos de audio y vuelve al menú**. Todo queda registrado en `/var/log/instalar_audio_imac.log`.
 
 ### Paso 1: dependencias
 
@@ -233,14 +242,14 @@ Si no se ejecuta como root, el script se relanza con `exec sudo bash "$0"`. Tamb
 | Arch | `base-devel dkms alsa-utils wget patch git psmisc linux[-lts/-zen/-hardened]-headers` |
 
 ### Paso 2: código fuente del driver (`preparar_fuentes`)
-Busca el driver parcheado en este orden y lo copia a **`/usr/src/snd_hda_macbookpro-0.1`**, la ruta que espera DKMS:
+Quita el registro DKMS anterior y el código viejo, y copia el driver parcheado a **`/usr/src/snd_hda_macbookpro-0.1`**, la ruta que espera DKMS. Lo busca en este orden:
 
 1. `./snd_hda_macbookpro_imac` (la carpeta de este repo), **lo normal**.
 2. `~/snd_hda_macbookpro` del usuario, si contiene `patch_cirrus/cirrus_apple.h`.
 3. **Respaldo**: descarga el driver original de GitHub y le aplica `parches/imac-cs8409.patch`. Si el original ha cambiado tanto que el parche no aplica, hace al menos la corrección del jack con `sed`.
 
 ### Paso 3: compilación con DKMS (`compilar_con_dkms`)
-Quita cualquier registro anterior de `snd_hda_macbookpro/0.1` en DKMS y ejecuta `install.cirrus.driver.sh -i`. Ese script:
+Primero comprueba que estén las cabeceras de tu kernel (`/lib/modules/<kernel>/build`). Avisa de que la descarga y la compilación pueden tardar **entre 5 y 20 minutos**, y luego ejecuta `install.cirrus.driver.sh -i`, mostrando la salida en pantalla y guardándola en el registro. Ese script:
 
 - descarga el código fuente del subsistema de sonido **exactamente de tu versión de kernel**;
 - le aplica los parches de Apple de davidjo (más los de este repo);
@@ -249,10 +258,12 @@ Quita cualquier registro anterior de `snd_hda_macbookpro/0.1` en DKMS y ejecuta 
 
 Funciona con kernels anteriores y posteriores a la reorganización del sonido de la 6.17: el script detecta la versión y usa `install.cirrus.driver.pre617.sh` si hace falta.
 
+Al terminar, el instalador **verifica el resultado**: el script tiene que acabar sin error **y** tiene que existir `snd-hda-codec-cs8409.ko*` en `extra/` o `updates/`. Si no se cumplen las dos cosas, la instalación se detiene ahí.
+
 ### Paso 4: persistencia (`configurar_modprobe_y_guard`)
-- Escribe `/etc/modprobe.d/cs8409.conf` con `options snd_hda_codec_cs8409 force_speakers=0`.
-- Instala `/usr/local/bin/check-cs8409-driver.sh`, que comprueba si existe el módulo para el kernel arrancado y, si falta, lo compila con `dkms install --force` y ejecuta `depmod`.
-- Crea y habilita el servicio **`cs8409-audio-guard.service`** (oneshot, antes de `sound.target`) que lanza ese script en cada arranque.
+- Escribe `/etc/modprobe.d/cs8409.conf` con `force_speakers=0`, **o conserva `force_speakers=1`** si ya lo tenías elegido.
+- Instala `/usr/local/bin/check-cs8409-driver.sh`, que comprueba si existe el módulo para el kernel arrancado. Si falta y están las cabeceras, lo compila con `dkms install --force` y ejecuta `depmod`. Si faltan las cabeceras, solo lo anota en el registro del sistema. Nunca hace fallar el arranque.
+- Crea y habilita el servicio **`cs8409-audio-guard.service`**. Se ejecuta **en segundo plano cuando ya hay red** (`After=network-online.target`, `WantedBy=multi-user.target`), con prioridad baja de CPU y disco, así que **no retrasa el arranque ni el escritorio**.
 - Habilita `dkms.service` si existe.
 
 ### Paso 5: perfiles de audio (`configurar_dual_audio_hdmi_altavoces`)
@@ -263,10 +274,11 @@ Regenera el initramfs para que arranque con el módulo nuevo: `dracut --force` (
 
 ### Paso 7: recarga en caliente y prueba (`reiniciar_modulos_y_probar`)
 1. Guarda los volúmenes de ALSA (`alsactl store`).
-2. Cierra PipeWire, WirePlumber y cualquier proceso que tenga abierto `/dev/snd/*`.
-3. Descarga `snd_hda_intel` y `snd_hda_codec_cs8409` y los vuelve a cargar con `force_speakers=0`.
-4. Restaura volúmenes, reinicia PipeWire del usuario, quita el silencio, pone el volumen al 100 %, selecciona el puerto **altavoces** y reproduce `complete.oga`.
-5. Si los módulos no se pudieron descargar (estaban en uso), **pregunta si quieres reiniciar**.
+2. Detiene con normalidad PipeWire y WirePlumber del usuario (`systemctl --user stop`, sockets incluidos).
+3. Si **otro programa** sigue usando `/dev/snd/*` (un navegador, Discord…), **no lo cierra**: muestra su nombre y deja la activación para el próximo reinicio.
+4. Si nada usa el audio, descarga `snd_hda_intel` y `snd_hda_codec_cs8409` (sin forzar) y los vuelve a cargar con el modo guardado en `cs8409.conf`.
+5. Vuelve a arrancar PipeWire y, si la recarga funcionó, busca la salida analógica, quita el silencio, pone el volumen al **40 %**, selecciona el puerto **altavoces** y reproduce `complete.oga`. Nunca usa `hw:`/`plughw:` directamente, porque no tienen control de volumen.
+6. Si hace falta reiniciar, **te lo pregunta**.
 
 ## 9. Archivos que crea o modifica en el sistema
 
@@ -284,6 +296,7 @@ Regenera el initramfs para que arranque con el módulo nuevo: `dracut --force` (
 | `~/.config/alsa-card-profile/…` y `~/.config/wireplumber/…` | Réplica en el perfil del usuario |
 | `/etc/nixos/cs8409-audio.nix` | Solo en NixOS |
 | `/var/lib/alsa/asound.state` | Volúmenes guardados por `alsactl` |
+| `/var/log/instalar_audio_imac.log` | Registro de cada instalación (salida de la compilación incluida) |
 
 ## 10. Modo altavoces / auriculares (`force_speakers`)
 
@@ -320,6 +333,8 @@ echo 1 | sudo tee /sys/module/snd_hda_codec_cs8409/parameters/force_speakers
 echo "options snd_hda_codec_cs8409 force_speakers=1" | sudo tee /etc/modprobe.d/cs8409.conf
 ```
 
+Si el módulo cargado no tiene el parche del iMac, el selector lo avisa, y el modo se guarda igualmente para cuando lo tenga. Si el archivo `cs8409.conf` existe pero no tiene la línea `force_speakers`, la añade sin borrar lo demás.
+
 > Si al cambiar en caliente la salida no conmuta enseguida, conecta y desconecta el jack o reinicia la reproducción. El driver evalúa el parámetro al recibir eventos del jack y al iniciar un stream.
 
 ## 11. Altavoces internos + HDMI al mismo tiempo
@@ -354,12 +369,13 @@ Así puedes elegir cada salida por separado en los ajustes de sonido de KDE o GN
 
 ## 12. NixOS
 
+> 🧪 **Experimental:** no se ha probado en NixOS.
+
 En NixOS no se compila nada a mano. La opción 5 genera **`/etc/nixos/cs8409-audio.nix`**, un módulo declarativo que:
 
 - construye `snd-hda-codec-cs8409` desde `davidjo/snd_hda_macbookpro` para `config.boot.kernelPackages`;
 - aplica la corrección del jack (`cs42l83_tip_sense(codec, 0)`) en `postPatch`;
 - lo añade a `boot.extraModulePackages`;
-- fija `options snd_hda_codec_cs8409 force_speakers=0`;
 - instala el perfil combinado y la regla de WirePlumber con `environment.etc`.
 
 Para activarlo:
@@ -373,14 +389,14 @@ imports = [ ./hardware-configuration.nix ./cs8409-audio.nix ];
 sudo nixos-rebuild switch
 ```
 
-> La primera vez fallará con un error de hash, porque se usa `lib.fakeSha256`. Copia el hash `got: sha256-…` que muestra Nix, ponlo en el campo `sha256` y vuelve a ejecutar `nixos-rebuild switch`. Ten en cuenta que el módulo de NixOS solo aplica la corrección del jack, no el parámetro `force_speakers`.
+> La primera vez fallará con un error de hash, porque se usa `lib.fakeSha256`. Copia el hash `got: sha256-…` que muestra Nix, ponlo en el campo `sha256` y vuelve a ejecutar `nixos-rebuild switch`. El módulo de NixOS solo aplica la corrección del jack: no incluye el parámetro `force_speakers`.
 
 ## 13. Actualizaciones del kernel
 
 El módulo está compilado para un kernel concreto, así que hay dos protecciones para que el sonido no se pierda al actualizar:
 
 1. **DKMS** (`AUTOINSTALL="yes"`): cuando el gestor de paquetes instala un kernel nuevo, DKMS recompila el módulo automáticamente, siempre que estén instaladas las cabeceras de ese kernel.
-2. **`cs8409-audio-guard.service`**: en cada arranque comprueba que el módulo exista para el kernel actual y, si falta, lo compila antes de que arranque el sonido.
+2. **`cs8409-audio-guard.service`**: en cada arranque, ya con red y en segundo plano, comprueba que el módulo exista para el kernel actual. Si falta, lo compila; el audio de Apple se activará en el **siguiente reinicio**. Mira qué hizo con `journalctl -u cs8409-audio-guard`.
 
 > En Fedora, `kernel-devel-matched` hace que las cabeceras se actualicen junto con el kernel. En Debian/Ubuntu instala el metapaquete de cabeceras (p. ej. `linux-headers-generic`) para el mismo efecto.
 
@@ -406,6 +422,8 @@ systemctl status cs8409-audio-guard.service
 | `dkms status` vacío o «added» | La compilación falló | Instala las cabeceras de tu kernel exacto (`uname -r`) y vuelve a instalar. |
 | Sigue diciendo «Auriculares» sin nada conectado | Falso positivo del sensor | `./cambiar_modo_audio.sh` → opción 2. |
 | Sonido solo tras reiniciar | Los módulos estaban en uso al instalar | Normal: el instalador pide reiniciar. |
+| «LA INSTALACIÓN NO SE COMPLETÓ» | Falló una dependencia, la descarga o la compilación | Lee `/var/log/instalar_audio_imac.log`. Lo más habitual: falta Internet o las cabeceras de tu kernel exacto. |
+| La instalación parece colgada | Está descargando el código del kernel o compilando | Espera (5–20 min). Puedes seguirlo con `sudo tail -f /var/log/instalar_audio_imac.log`. |
 | Sin sonido tras actualizar el kernel | Faltaban las cabeceras del kernel nuevo | Instálalas y ejecuta `sudo /usr/local/bin/check-cs8409-driver.sh`. |
 | El módulo no carga: «Key was rejected by service» | Secure Boot activo con un módulo sin firmar | Desactiva Secure Boot o firma el módulo (MOK). |
 | No aparece el perfil «Altavoces internos + HDMI» | WirePlumber no recargado | `systemctl --user restart pipewire wireplumber`. |
@@ -413,7 +431,9 @@ systemctl status cs8409-audio-guard.service
 
 ## 15. Desinstalar
 
-No hay desinstalador automático. Estos son los pasos manuales:
+Usa la opción **8) Desinstalar el controlador** del instalador. Pide confirmación, quita todo y regenera el initramfs.
+
+Si lo prefieres a mano, estos son los pasos:
 
 ```bash
 sudo dkms remove -m snd_hda_macbookpro/0.1 --all
@@ -444,6 +464,7 @@ Después reinicia y volverá a cargarse el módulo `snd_hda_codec_cs8409` del ke
 - El sonido no será idéntico al de macOS, que aplica filtros digitales propios a tweeters y woofers.
 - `force_speakers` lo añade este repo: no existe en el driver original ni en el módulo de NixOS generado.
 - El instalador **no tiene modo simulación**: instala paquetes y escribe en `/etc` y `/usr/src` directamente.
+- Las pruebas de [`pruebas/test_scripts.sh`](pruebas/test_scripts.sh) simulan los comandos del sistema; no sustituyen a una prueba en un iMac real.
 
 ## 17. Estructura del repositorio
 
@@ -452,6 +473,8 @@ imac-2017-linux-audio-cs8409/
 ├── instalar_audio_imac.sh        # Instalador universal con menú
 ├── cambiar_modo_audio.sh         # Selector automático / altavoces forzados
 ├── crear_lanzadores.sh           # Crea los accesos directos del escritorio
+├── pruebas/
+│   └── test_scripts.sh           # Pruebas sin hardware (bash pruebas/test_scripts.sh)
 ├── lanzadores/
 │   ├── Instalador_Audio_Apple.desktop.in
 │   └── Modo_Audio_Apple.desktop.in
@@ -463,6 +486,7 @@ imac-2017-linux-audio-cs8409/
 │   ├── dkms.conf
 │   ├── patch_cirrus/             # Código del codec CS8409 + soporte Apple
 │   └── ...
+├── CHANGELOG.md                  # Historial de versiones
 ├── LICENSE                       # GPL-2.0
 └── README.md
 ```
