@@ -1,6 +1,6 @@
 # 🔊 Audio del iMac 2017 en Linux — Cirrus Logic CS8409
 
-**Versión actual: 1.1.0** · [Novedades](CHANGELOG.md)
+**Versión actual: 1.2.0** · [Novedades](CHANGELOG.md)
 
 **Solución completa para que funcionen los altavoces internos, los auriculares y el HDMI de los Apple iMac de 2017 (iMac18,1 · iMac18,2 · iMac18,3) en Linux.**
 
@@ -153,14 +153,35 @@ En Fedora, DKMS instala el módulo en `/lib/modules/<kernel>/extra` y no en `upd
 
 - Un iMac 2017 (o MacBook Pro) con **CS8409** (ver [sección 2](#2-es-mi-equipo)).
 - Una distribución **tradicional** (no inmutable) de estas familias:
-  - **RPM**: Fedora, RHEL, CentOS, Rocky, AlmaLinux, openSUSE/SLES
+  - **RPM**: Fedora, RHEL, CentOS, Rocky, AlmaLinux, openSUSE/SLES (en RHEL y derivados se activa EPEL automáticamente para `dkms`)
   - **DEB**: Ubuntu, Debian, Linux Mint, Pop!_OS, elementary, Zorin
   - **Arch**: Arch Linux, Manjaro, EndeavourOS, Garuda
   - **NixOS** (genera un módulo declarativo)
 - Conexión a Internet (para dependencias y, si hace falta, el driver original).
 - `sudo`. El instalador pide la contraseña solo.
 - **PipeWire + WirePlumber** para la parte de HDMI simultáneo (por defecto en las distros actuales).
-- `konsole` solo para los accesos directos de escritorio. Los scripts funcionan en cualquier terminal.
+- Cualquier escritorio: los accesos directos usan la terminal predeterminada (Konsole, GNOME Console, etc.).
+
+### Comprobación de hardware
+
+Antes de tocar nada, el instalador comprueba que el equipo sea un **Mac con Cirrus Logic CS8409**: codec CS8409 con subsystem de Apple (`0x106b…`), o modelo `iMac18,1-3` / `MacBookPro13,x-14,x`. En cualquier otro PC muestra el modelo detectado y avisa de que podría quedarse **sin sonido**. Solo continúa si escribes `CONTINUAR`. Así se protege, por ejemplo, a un portátil Dell con CS8409 o a un PC con Realtek, que usan la misma dirección de audio Intel (`00:1f.3`).
+
+### Compatibilidad probada (v1.2.0)
+
+Probado en contenedores (detección de la distro y existencia de todos los paquetes en sus repositorios) y con las pruebas automáticas de `pruebas/test_scripts.sh`:
+
+| Distribución | Detección | Paquetes | Notas |
+|---|---|---|---|
+| Fedora 44 | RPM ✔ | ✔ | `wget` lo aporta `wget2-wget` |
+| Rocky Linux 9 | RPM ✔ | ✔ | `dkms` llega desde EPEL (se activa solo) |
+| openSUSE Tumbleweed | RPM ✔ | ✔ | |
+| Ubuntu 24.04 | DEB ✔ | ✔ | |
+| Debian 13 | DEB ✔ | ✔ | |
+| Arch Linux | Arch ✔ | ✔ | |
+| Fedora Kinoite (inmutable) | Bloqueado ✔ | — | Avisa de que no es compatible |
+| PC no Apple (HP con Realtek) | — | — | Detectado como no compatible ✔ |
+
+> La compilación del módulo y el sonido solo pueden probarse en un iMac real; los contenedores comprueban todo lo demás.
 
 ## 6. Instalación
 
@@ -184,14 +205,14 @@ Elige **`1) Autodetectar e instalar automáticamente`**. Al terminar oirás un s
 
 Crea en el menú de aplicaciones (y en el Escritorio) dos accesos que apuntan a la carpeta donde clonaste el repo:
 
-- **Instalador Audio Apple (CS8409)**: abre el instalador en Konsole.
+- **Instalador Audio Apple (CS8409)**: abre el instalador en la terminal de tu escritorio.
 - **Modo de Audio Apple (Altavoces / Auriculares)**: abre el selector de modo.
 
 ## 7. El instalador, opción por opción
 
 ```
 =============================================================================
-      INSTALADOR UNIVERSAL DE AUDIO APPLE (CIRRUS CS8409 / TAS57642)  v1.1.0
+      INSTALADOR UNIVERSAL DE AUDIO APPLE (CIRRUS CS8409 / TAS57642)  v1.2.0
            Soporte probado para iMac18,1, iMac18,2, iMac18,3 y MBP
 =============================================================================
  Kernel activo : 6.x.y

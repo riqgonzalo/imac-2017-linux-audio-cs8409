@@ -8,7 +8,7 @@
 # Los errores se comprueban paso a paso (sin "set -e") para poder avisar con
 # claridad y volver al menú en lugar de cerrar la ventana a mitad de camino.
 
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 # ------------------------------------------------------------------------------
 # 1. Variables globales
@@ -19,6 +19,8 @@ SRC_DEST="/usr/src/snd_hda_macbookpro-0.1"
 DESKTOP_SRC="$SCRIPT_DIR/snd_hda_macbookpro_imac"
 PATCH_FILE="$SCRIPT_DIR/parches/imac-cs8409.patch"
 LOG_FILE="${LOG_FILE:-/var/log/instalar_audio_imac.log}"
+ASOUND_DIR="${ASOUND_DIR:-/proc/asound}"
+DMI_DIR="${DMI_DIR:-/sys/class/dmi/id}"
 MODDIR="${MODDIR:-/lib/modules}"
 VOLUMEN_PRUEBA="40%"
 SONIDO_PRUEBA="/usr/share/sounds/freedesktop/stereo/complete.oga"
@@ -47,7 +49,9 @@ como_usuario() {
         "$@"
         return
     fi
-    runuser -u "$CURRENT_USER" -- env \
+    local cambiar=(runuser -u "$CURRENT_USER" --)
+    command -v runuser >/dev/null 2>&1 || cambiar=(sudo -u "$CURRENT_USER")
+    "${cambiar[@]}" env \
         XDG_RUNTIME_DIR="/run/user/$CURRENT_UID" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$CURRENT_UID/bus" \
         "$@"
@@ -63,6 +67,42 @@ modulo_cs8409_instalado() {
 registrar() {
     mkdir -p "$(dirname "$LOG_FILE")"
     echo -e "\n===== $(date '+%Y-%m-%d %H:%M:%S') · v$VERSION · kernel $KVER · $* =====" >> "$LOG_FILE"
+}
+
+# ¿Es un Mac con el puente de audio Cirrus Logic CS8409?
+hardware_compatible() {
+    local codecs vendor producto
+    codecs=$(cat "$ASOUND_DIR"/card*/codec\#* 2>/dev/null)
+    vendor=$(cat "$DMI_DIR/sys_vendor" 2>/dev/null)
+    producto=$(cat "$DMI_DIR/product_name" 2>/dev/null)
+    if echo "$codecs" | grep -q "CS8409" && echo "$codecs" | grep -qi "Subsystem Id: 0x106b"; then
+        return 0
+    fi
+    # Respaldo por modelo (si el audio no llegó a detectarse)
+    if [[ "$vendor" == Apple* ]] && [[ "$producto" =~ ^(iMac18,[123]|MacBookPro1[34],[123])$ ]]; then
+        return 0
+    fi
+    return 1
+}
+
+# Pide confirmación explícita si el equipo no es compatible. Devuelve 1 si se cancela.
+confirmar_hardware() {
+    hardware_compatible && return 0
+    local producto
+    producto=$(cat "$DMI_DIR/product_name" 2>/dev/null || echo "desconocido")
+    echo ""
+    error "Este equipo NO parece un Mac con el chip de audio Cirrus Logic CS8409."
+    echo "    Modelo detectado: $producto"
+    echo "    Instalar este controlador y su perfil de audio en otro equipo puede"
+    echo "    dejarlo SIN SONIDO (cambia el módulo del kernel y la configuración de PipeWire)."
+    echo ""
+    read -r -p "Escribe CONTINUAR (en mayúsculas) para instalar de todas formas: " resp
+    if [ "$resp" != "CONTINUAR" ]; then
+        echo "Cancelado: no se ha modificado nada."
+        pausa
+        return 1
+    fi
+    aviso "Instalación forzada en hardware no verificado."
 }
 
 fallo_instalacion() {
@@ -462,6 +502,7 @@ pasos_comunes() {
 }
 
 instalar_rpm() {
+    confirmar_hardware || return 1
     echo -e "\n\e[1;32m============================================================\e[0m"
     echo -e "\e[1;32m Instalando para Familia RPM (Fedora / RHEL / openSUSE)\e[0m"
     echo -e "\e[1;32m============================================================\e[0m"
@@ -469,6 +510,13 @@ instalar_rpm() {
 
     local base="kernel-devel-$KVER kernel-headers gcc make patch git dkms alsa-utils wget psmisc"
     if command -v dnf &>/dev/null; then
+        local os_id os_like
+        os_id=$(. /etc/os-release 2>/dev/null; echo "${ID:-}")
+        os_like=$(. /etc/os-release 2>/dev/null; echo "${ID_LIKE:-}")
+        if [ "$os_id" != "fedora" ] && [[ "$os_id $os_like" =~ (rhel|centos|rocky|almalinux) ]] && ! dnf -q list dkms &>/dev/null; then
+            echo "dkms no está en los repositorios base; activando EPEL..."
+            dnf install -y epel-release || aviso "No se pudo activar EPEL (en RHEL: subscription-manager repos --enable codeready-builder...)."
+        fi
         echo "Instalando paquetes con DNF..."
         # shellcheck disable=SC2086
         dnf install -y $base kernel-devel-matched || dnf install -y $base \
@@ -485,6 +533,7 @@ instalar_rpm() {
 }
 
 instalar_deb() {
+    confirmar_hardware || return 1
     echo -e "\n\e[1;32m============================================================\e[0m"
     echo -e "\e[1;32m Instalando para Familia DEB (Ubuntu / Debian / Linux Mint)\e[0m"
     echo -e "\e[1;32m============================================================\e[0m"
@@ -499,6 +548,7 @@ instalar_deb() {
 }
 
 instalar_arch() {
+    confirmar_hardware || return 1
     echo -e "\n\e[1;32m============================================================\e[0m"
     echo -e "\e[1;32m Instalando para Familia Arch (Arch / Manjaro / EndeavourOS)\e[0m"
     echo -e "\e[1;32m============================================================\e[0m"
@@ -515,13 +565,15 @@ instalar_arch() {
     fi
 
     echo "Instalando cabeceras ($header_pkg) y utilidades con Pacman..."
-    pacman -Sy --needed --noconfirm base-devel dkms alsa-utils wget patch git psmisc "$header_pkg" \
+    # Sin "-Sy": sincronizar sin actualizar puede traer cabeceras de un kernel más nuevo
+    pacman -S --needed --noconfirm base-devel dkms alsa-utils wget patch git psmisc "$header_pkg" \
         || { fallo_instalacion "no se pudieron instalar las dependencias con Pacman"; return 1; }
 
     pasos_comunes 'mkinitcpio -P'
 }
 
 instalar_nix() {
+    confirmar_hardware || return 1
     echo -e "\n\e[1;32m============================================================\e[0m"
     echo -e "\e[1;32m Configuración para Nix / NixOS (experimental)\e[0m"
     echo -e "\e[1;32m============================================================\e[0m"
@@ -765,6 +817,7 @@ main() {
             4) instalar_arch ;;
             5) instalar_nix ;;
             6)
+                confirmar_hardware || continue
                 configurar_dual_audio_hdmi_altavoces
                 detener_audio_usuario
                 iniciar_audio_usuario

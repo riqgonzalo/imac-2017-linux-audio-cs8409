@@ -1,5 +1,20 @@
 # Historial de versiones
 
+## [1.2.0] — 2026-10-24
+
+### Seguridad en otros equipos
+- **Comprobación de hardware**: antes de instalar (y antes de la opción 6) se verifica que sea un Mac con CS8409 (codec + subsystem `0x106b`, o modelo `iMac18,x` / `MacBookPro13-14,x`). En otro PC hay que escribir `CONTINUAR`; si no, no se toca nada.
+
+### Compatibilidad
+- RHEL / Rocky / AlmaLinux: se activa EPEL automáticamente si `dkms` no está en los repositorios base.
+- Arch: `pacman -S` en lugar de `pacman -Sy`, para evitar actualizaciones parciales que traigan cabeceras de un kernel más nuevo.
+- Si no existe `runuser`, las órdenes de audio del usuario se ejecutan con `sudo -u`.
+- Los accesos directos usan `Terminal=true`: funcionan con la terminal de cualquier escritorio, no solo Konsole.
+
+### Pruebas
+- Detección de la distro y nombres de paquetes verificados en contenedores de Fedora 44, Rocky 9, openSUSE Tumbleweed, Ubuntu 24.04, Debian 13 y Arch.
+- `pruebas/test_scripts.sh`: 26 comprobaciones (7 nuevas de hardware).
+
 ## [1.1.0] — 2026-10-24
 
 ### Corregido

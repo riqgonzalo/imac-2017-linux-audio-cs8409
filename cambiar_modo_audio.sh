@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Selector de Modo de Audio para Apple iMac (Altavoces / Auriculares)  v1.1.0
+# Selector de Modo de Audio para Apple iMac (Altavoces / Auriculares)  v1.2.0
 # ==============================================================================
 
 PARAM="${CS8409_PARAM:-/sys/module/snd_hda_codec_cs8409/parameters/force_speakers}"

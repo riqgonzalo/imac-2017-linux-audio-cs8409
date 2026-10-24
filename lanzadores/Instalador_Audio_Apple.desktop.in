@@ -2,7 +2,7 @@
 Type=Application
 Name=Instalador Audio Apple (CS8409)
 Comment=Instalador universal de audio para iMac18,1 y MacBook Pro
-Exec=konsole -e bash -c "'@DIR@/instalar_audio_imac.sh'; echo; read -p 'Presiona Enter para cerrar...' dummy"
+Exec=bash -c "'@DIR@/instalar_audio_imac.sh'; echo; read -p 'Presiona Enter para cerrar...' dummy"
 Icon=audio-card
-Terminal=false
+Terminal=true
 Categories=System;

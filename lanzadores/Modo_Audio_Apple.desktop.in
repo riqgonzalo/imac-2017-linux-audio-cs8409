@@ -2,7 +2,7 @@
 Type=Application
 Name=Modo de Audio Apple (Altavoces / Auriculares)
 Comment=Cambia entre detección automática del jack y altavoces internos forzados
-Exec=konsole -e bash "@DIR@/cambiar_modo_audio.sh"
+Exec=bash "@DIR@/cambiar_modo_audio.sh"
 Icon=audio-speakers
-Terminal=false
+Terminal=true
 Categories=System;

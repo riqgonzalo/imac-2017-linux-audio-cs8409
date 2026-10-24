@@ -59,5 +59,16 @@ check "$RELOAD_OK" "0" "pide reinicio en ese caso"
 check "$VOLUMEN_PRUEBA" "40%" "volumen de prueba moderado"
 check "$(grep -v '^ *#' $REPO/instalar_audio_imac.sh | grep -c 'plughw')" "0" "ya no usa plughw (sin control de volumen)"
 check "$(grep -v '^ *#' $REPO/instalar_audio_imac.sh | grep -c 'killall\|fuser -k\|rmmod -f')" "0" "sin killall/fuser -k/rmmod -f"
+echo "== comprobación de hardware"
+source "$REPO/instalar_audio_imac.sh"; pausa() { :; }
+fake() { rm -rf "$S/hw"; mkdir -p "$S/hw/asound/card0" "$S/hw/dmi"; printf 'Codec: %s\nSubsystem Id: %s\n' "$1" "$2" > "$S/hw/asound/card0/codec#0"; echo "$3" > "$S/hw/dmi/sys_vendor"; echo "$4" > "$S/hw/dmi/product_name"; ASOUND_DIR="$S/hw/asound"; DMI_DIR="$S/hw/dmi"; }
+fake "Cirrus Logic CS8409" "0x106b1000" "Apple Inc." "iMac18,1";   hardware_compatible; check "$?" "0" "iMac18,1 con CS8409: compatible"
+fake "Cirrus Logic CS8409" "0x106b3900" "Apple Inc." "MacBookPro14,3"; hardware_compatible; check "$?" "0" "MacBook Pro con CS8409: compatible"
+fake "Realtek ALC287" "0x103c8a3e" "HP" "Victus by HP Gaming Laptop"; hardware_compatible; check "$?" "1" "PC HP con Realtek: NO compatible"
+fake "Cirrus Logic CS8409" "0x10280bd6" "Dell Inc." "XPS 15";       hardware_compatible; check "$?" "1" "Dell con CS8409 (no Apple): NO compatible"
+rm -rf "$S/hw/asound"; echo "Apple Inc." > "$S/hw/dmi/sys_vendor"; echo "iMac18,3" > "$S/hw/dmi/product_name"; hardware_compatible; check "$?" "0" "iMac18,3 sin audio detectado: compatible por modelo"
+fake "Realtek ALC287" "0x103c8a3e" "HP" "Victus"; confirmar_hardware <<< "si" >/dev/null 2>&1; check "$?" "1" "en PC no compatible cancela si no se escribe CONTINUAR"
+confirmar_hardware <<< "CONTINUAR" >/dev/null 2>&1; check "$?" "0" "permite forzar escribiendo CONTINUAR"
+
 echo; echo "RESULTADO: $pasa correctas, $falla fallidas"
 [ "$falla" -eq 0 ]
