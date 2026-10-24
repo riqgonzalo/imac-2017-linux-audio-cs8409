@@ -7,7 +7,7 @@
 Incluye un driver parcheado basado en [davidjo/snd_hda_macbookpro](https://github.com/davidjo/snd_hda_macbookpro), un **instalador universal con menú** (Fedora, Ubuntu/Debian, Arch, openSUSE y NixOS), compilación automática con **DKMS** para que sobreviva a las actualizaciones del kernel, un **selector de modo altavoces / auriculares** y la configuración de **PipeWire / WirePlumber** para usar los altavoces y el HDMI a la vez.
 
 ```bash
-git clone https://github.com/riqgonzalo-lgtm/imac-2017-linux-audio-cs8409.git
+git clone https://github.com/riqgonzalo/imac-2017-linux-audio-cs8409.git
 cd imac-2017-linux-audio-cs8409
 ./instalar_audio_imac.sh        # elige la opción 1 (autodetectar)
 ```
@@ -167,7 +167,7 @@ En Fedora, DKMS instala el módulo en `/lib/modules/<kernel>/extra` y no en `upd
 ### Opción A: terminal
 
 ```bash
-git clone https://github.com/riqgonzalo-lgtm/imac-2017-linux-audio-cs8409.git
+git clone https://github.com/riqgonzalo/imac-2017-linux-audio-cs8409.git
 cd imac-2017-linux-audio-cs8409
 ./instalar_audio_imac.sh
 ```
@@ -494,7 +494,7 @@ imac-2017-linux-audio-cs8409/
 ## 18. Créditos y licencia
 
 - **Driver original:** [davidjo/snd_hda_macbookpro](https://github.com/davidjo/snd_hda_macbookpro). Todo el trabajo de ingeniería inversa del CS8409, el CS42L83 y los amplificadores de Apple es suyo.
-- **Corrección para iMac 2017, parámetro `force_speakers`, instalador universal, selector de modo y configuración de PipeWire:** [@riqgonzalo-lgtm](https://github.com/riqgonzalo-lgtm).
+- **Corrección para iMac 2017, parámetro `force_speakers`, instalador universal, selector de modo y configuración de PipeWire:** [@riqgonzalo](https://github.com/riqgonzalo).
 
 Como el driver deriva de código **GPL-2.0**, todo el repositorio se distribuye bajo la [GNU General Public License v2](LICENSE).
 
